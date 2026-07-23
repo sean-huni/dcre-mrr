@@ -292,14 +292,13 @@ class MrrJobTest {
                 List.of(MandateBookFixture.detail(1, "CRE", "MREF-COLL-X")));
         assertEquals(BatchStatus.COMPLETED, jobOperator.start(mrrJob, params(first, bookP, null)).getStatus());
 
-        // Isolate the resubmit's seam from the first arrival's. Verified: this
-        // test's JobRepository is Spring Batch 6's non-persistent
-        // ResourcelessJobRepository (MRR wires no batch datasource), so
-        // JobExecution.getId() is a CONSTANT 1 for every run, not monotonic; the
-        // fallback seam name local-mrr-<id> therefore repeats and StagedWrite is
-        // exists->skip. Without this clear the first arrival's ACCEPTED seam masks
-        // this run's FILE_FATAL verdict, so the clear is REQUIRED, not belt-and-
-        // suspenders (production names the seam by the unique JOB_NAME, so it is moot there).
+        // Isolate the resubmit's seam from the first arrival's. MRR now wires the
+        // platform persistent JDBC JobRepository (MRR_BATCH_ tables), so
+        // JobExecution.getId() is MONOTONIC and persistent, not the constant 1 of
+        // Batch 6's ResourcelessJobRepository: the two runs already get DISTINCT
+        // local-mrr-<id> seam names, so this clearOutcomes() is no longer REQUIRED
+        // to avoid an id collision. It stays as defensive isolation (production
+        // names the seam by the unique JOB_NAME, so it is moot there).
         clearOutcomes();
         UUID resubmit = UUID.randomUUID();
         Path bookQ = MandateBookFixture.book(BOOK_DIR, "FNBCC01_MNDT2026072212000007.txt",
