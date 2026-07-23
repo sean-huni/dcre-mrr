@@ -1,0 +1,61 @@
+package za.co.fnb.dcre.mrr.domain;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
+
+/**
+ * R-07 idempotent minting: the MndtReqId is a DETERMINISTIC digest over the
+ * FULL business identity tuple (client, mandate_ref, action_code, msg_id),
+ * never a random draw, so a byte-verbatim replay re-mints the identical id
+ * and the spine UNIQUE constraint arbitrates duplicates instead of minting
+ * drift. Every component is mandatory (house idempotency-key rule: no
+ * nullable dimensions in an identity tuple). Components are LENGTH-PREFIXED
+ * before hashing (m6) so their boundaries are part of the digest input and a
+ * raw delimiter join cannot make ("A","B|C") and ("A|B","C") collide. Shape:
+ * "MRQ" + 32 hex chars of SHA-256 = 35 chars, the ISO 20022 MndtReqId maximum.
+ */
+public final class MndtReqIdMinter {
+
+    static final String PREFIX = "MRQ";
+    static final int LENGTH = 35;
+
+    private MndtReqIdMinter() {
+    }
+
+    public static String mint(String client, String mandateRef, String actionCode, String msgId) {
+        String tuple = frame(required("client", client))
+                + frame(required("mandateRef", mandateRef))
+                + frame(required("actionCode", actionCode))
+                + frame(required("msgId", msgId));
+        String hex = HexFormat.of().formatHex(
+                sha256().digest(tuple.getBytes(StandardCharsets.UTF_8)));
+        return PREFIX + hex.substring(0, LENGTH - PREFIX.length());
+    }
+
+    /**
+     * Length-prefixed component framing ("&lt;len&gt;:&lt;value&gt;") so component
+     * boundaries are part of the digest input (m6): injective, so no delimiter
+     * ambiguity, and deterministic, so replay-stable.
+     */
+    private static String frame(String component) {
+        return "%d:%s".formatted(component.length(), component);
+    }
+
+    private static String required(String name, String value) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(
+                    "MndtReqId identity component '" + name + "' is blank: full-identity tuple required (R-07)");
+        }
+        return value.strip();
+    }
+
+    private static MessageDigest sha256() {
+        try {
+            return MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+}
