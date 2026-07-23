@@ -4,6 +4,7 @@ import za.co.fnb.dcre.mrr.data.model.MandateRequestEntryEntity;
 import za.co.fnb.dcre.mrr.data.model.MandateRequestHeaderEntity;
 import za.co.fnb.dcre.mrr.data.repo.MandateRequestEntryBatchDao;
 import za.co.fnb.dcre.mrr.data.repo.MandateRequestHeaderRepo;
+import za.co.fnb.dcre.mrr.domain.IntraFileDuplicates;
 import za.co.fnb.dcre.mrr.domain.MndtReqIdMinter;
 import za.co.fnb.dcre.platform.files.FixedWidthLayout;
 import za.co.fnb.dcre.platform.files.MandateLayouts;
@@ -21,7 +22,9 @@ import java.util.UUID;
  * deterministic. Action codes canonicalize CRE|AMD|CAN to CREATE|AMEND|CANCEL
  * (unknown tokens pass through raw for MRV's structural verdict). MndtReqId
  * is minted deterministically from (client, mandate_ref, action_code, msg_id)
- * and persisted here, write-ahead of every downstream side effect (R-07).
+ * and persisted here, write-ahead of every downstream side effect (R-07). A
+ * first-wins intra-file duplicate (flagged at ingest, B1a) instead lands a NULL
+ * MndtReqId + dup_in_file=true, so it never poisons the global UNIQUE.
  */
 public class MandateEntryWriter {
 
@@ -33,15 +36,17 @@ public class MandateEntryWriter {
     private final MandateRequestHeaderRepo headerRepo;
     private final UUID arrivalId;
     private final int amountScale;
+    private final IntraFileDuplicates duplicates;
 
     private MandateRequestHeaderEntity header;
 
     public MandateEntryWriter(MandateRequestEntryBatchDao dao, MandateRequestHeaderRepo headerRepo,
-                              UUID arrivalId, int amountScale) {
+                              UUID arrivalId, int amountScale, IntraFileDuplicates duplicates) {
         this.dao = dao;
         this.headerRepo = headerRepo;
         this.arrivalId = arrivalId;
         this.amountScale = amountScale;
+        this.duplicates = duplicates;
     }
 
     public void writeDetails(List<? extends NumberedLine> lines) {
@@ -58,6 +63,10 @@ public class MandateEntryWriter {
         String mandateRef = layout.slice(line, "mandate_ref").strip();
         String amountRaw = layout.slice(line, "max_collection_amount");
         String expiry = layout.slice(line, "expiry_date").strip();
+        boolean dupInFile = duplicates.isDuplicate(seq);
+        String mndtReqId = dupInFile ? null
+                : MndtReqIdMinter.mint(headerIdentity().getDestinationId(), mandateRef,
+                        actionCode, headerIdentity().getMsgId());
         return MandateRequestEntryEntity.of(arrivalId, seq,
                 layout.slice(line, "record_type"),
                 actionCode,
@@ -74,8 +83,7 @@ public class MandateEntryWriter {
                 layout.slice(line, "collection_day"),
                 layout.slice(line, "start_date"),
                 expiry.isEmpty() ? null : expiry,
-                MndtReqIdMinter.mint(headerIdentity().getDestinationId(), mandateRef,
-                        actionCode, headerIdentity().getMsgId()));
+                mndtReqId, dupInFile);
     }
 
     /** CRE|AMD|CAN canonicalize; anything else passes through raw for MRV (structural tier owner). */

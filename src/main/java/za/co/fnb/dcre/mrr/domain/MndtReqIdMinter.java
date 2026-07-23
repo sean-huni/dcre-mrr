@@ -11,8 +11,10 @@ import java.util.HexFormat;
  * never a random draw, so a byte-verbatim replay re-mints the identical id
  * and the spine UNIQUE constraint arbitrates duplicates instead of minting
  * drift. Every component is mandatory (house idempotency-key rule: no
- * nullable dimensions in an identity tuple). Shape: "MRQ" + 32 hex chars of
- * SHA-256 = 35 chars, the ISO 20022 MndtReqId maximum.
+ * nullable dimensions in an identity tuple). Components are LENGTH-PREFIXED
+ * before hashing (m6) so their boundaries are part of the digest input and a
+ * raw delimiter join cannot make ("A","B|C") and ("A|B","C") collide. Shape:
+ * "MRQ" + 32 hex chars of SHA-256 = 35 chars, the ISO 20022 MndtReqId maximum.
  */
 public final class MndtReqIdMinter {
 
@@ -23,14 +25,22 @@ public final class MndtReqIdMinter {
     }
 
     public static String mint(String client, String mandateRef, String actionCode, String msgId) {
-        String tuple = String.join("|",
-                required("client", client),
-                required("mandateRef", mandateRef),
-                required("actionCode", actionCode),
-                required("msgId", msgId));
+        String tuple = frame(required("client", client))
+                + frame(required("mandateRef", mandateRef))
+                + frame(required("actionCode", actionCode))
+                + frame(required("msgId", msgId));
         String hex = HexFormat.of().formatHex(
                 sha256().digest(tuple.getBytes(StandardCharsets.UTF_8)));
         return PREFIX + hex.substring(0, LENGTH - PREFIX.length());
+    }
+
+    /**
+     * Length-prefixed component framing ("&lt;len&gt;:&lt;value&gt;") so component
+     * boundaries are part of the digest input (m6): injective, so no delimiter
+     * ambiguity, and deterministic, so replay-stable.
+     */
+    private static String frame(String component) {
+        return "%d:%s".formatted(component.length(), component);
     }
 
     private static String required(String name, String value) {

@@ -47,8 +47,12 @@
              persisted at ingest, write-ahead of every downstream side effect
              (R-07 idempotent minting): a byte-verbatim replay re-mints the
              IDENTICAL id, so uq_man_req_entry_mndt_req_id arbitrates duplicate
-             submissions instead of minting drift. spine_state defaults to
-             RECEIVED and is thereafter advanced by MRV/MAF/MIS only. -->
+             submissions instead of minting drift. mndt_req_id is NULLABLE (B1a):
+             the first-wins loser of an intra-file (mandate_ref, action_code)
+             duplicate lands NULL (NULLs are exempt from the UNIQUE in CRDB) with
+             dup_in_file=true, so it never poison-pills the constraint mid-chunk.
+             spine_state defaults to RECEIVED and is thereafter advanced by
+             MRV/MAF/MIS only. -->
         <preConditions onFail="MARK_RAN">
             <not><tableExists tableName="mandate_request_entry"/></not>
         </preConditions>
@@ -75,7 +79,13 @@
             <column name="start_date" type="VARCHAR(8)"/>
             <column name="expiry_date" type="VARCHAR(8)"/>
             <column name="mndt_req_id" type="VARCHAR(35)">
-                <constraints nullable="false" unique="true" uniqueConstraintName="uq_man_req_entry_mndt_req_id"/>
+                <constraints nullable="true" unique="true" uniqueConstraintName="uq_man_req_entry_mndt_req_id"/>
+            </column>
+            <!-- B1a: the later occurrence of an intra-file (mandate_ref, action_code)
+                 duplicate lands here true (mndt_req_id NULL); MRV (T4) emits
+                 FAIL_DUPLICATE_REF (platform-model MandateOutcome) for dup_in_file rows. -->
+            <column name="dup_in_file" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
             </column>
             <column name="spine_state" type="VARCHAR(16)" defaultValue="RECEIVED">
                 <constraints nullable="false"/>

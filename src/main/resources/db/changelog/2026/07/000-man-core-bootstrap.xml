@@ -59,8 +59,12 @@
             <column name="description" value="Revolving Facility/ENDO"/>
             <column name="mandates_allowed" valueBoolean="true"/>
         </insert>
+        <!-- m3: rollback deletes ONLY the codes this changeset seeds, never the
+             whole table (the shared core may hold attested rows this owns none of). -->
         <rollback>
-            <delete tableName="account_type"/>
+            <delete tableName="account_type">
+                <where>code IN ('CHQ', 'SAV', 'TRN', 'CC', 'RF')</where>
+            </delete>
         </rollback>
     </changeSet>
 
@@ -200,14 +204,21 @@
             <column name="system_action" value="BANK_RISK"/>
             <column name="accepted" valueBoolean="false"/>
         </insert>
+        <!-- m2 marker: ISO 20022 external status-reason TM01 is CutOffTime; DCRE
+             REPURPOSES it here as the authorisation-window-expiry reason per plan
+             (PDNG starts the timer; system_action EXPIRE stays). The seeded
+             description/system_action are shape-canon with infra seed-man-core.sql. -->
         <insert tableName="mandate_reason_code">
             <column name="code" value="TM01"/>
             <column name="description" value="Authorisation window timeout"/>
             <column name="system_action" value="EXPIRE"/>
             <column name="accepted" valueBoolean="false"/>
         </insert>
+        <!-- m3: rollback deletes ONLY the nine reason codes this changeset seeds. -->
         <rollback>
-            <delete tableName="mandate_reason_code"/>
+            <delete tableName="mandate_reason_code">
+                <where>code IN ('AC01', 'AC04', 'AC06', 'AG01', 'MD01', 'MD06', 'MD07', 'MS03', 'TM01')</where>
+            </delete>
         </rollback>
     </changeSet>
 

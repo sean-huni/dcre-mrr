@@ -236,6 +236,92 @@ class MrrJobTest {
     }
 
     @Test
+    @Order(7)
+    void intraFileDuplicateRefFirstWinsAndReplaysDeterministically() throws Exception {
+        // B1(a): two rows sharing (mandate_ref, action_code) in ONE book must
+        // not poison the global mndt_req_id UNIQUE: the FIRST occurrence (by
+        // sequence) mints, later occurrences land with NULL id + dup_in_file
+        // for MRV's FAIL_DUPLICATE_REF verdict, deterministically across replays.
+        UUID arrival = UUID.randomUUID();
+        Path book = MandateBookFixture.book(BOOK_DIR, "FNBCC01_MNDT2026072212000005.txt",
+                MandateBookFixture.header(MandateBookFixture.CLIENT, 3),
+                List.of(MandateBookFixture.detail(1, "CRE", "MREF-DUP-A"),
+                        MandateBookFixture.detail(2, "CRE", "MREF-DUP-B"),
+                        MandateBookFixture.detail(3, "CRE", "MREF-DUP-A")));
+
+        JobExecution run = jobOperator.start(mrrJob, params(arrival, book, null));
+        assertEquals(BatchStatus.COMPLETED, run.getStatus(),
+                "an intra-file duplicate is DATA for MRV, never a technical crash (B1)");
+
+        List<java.util.Map<String, Object>> rows = jdbc.queryForList(
+                "SELECT sequence, mndt_req_id, dup_in_file FROM mandate_request_entry WHERE arrival_id=? ORDER BY sequence",
+                arrival);
+        assertEquals(3, rows.size());
+        assertEquals(35, String.valueOf(rows.get(0).get("mndt_req_id")).length(), "first occurrence mints");
+        assertEquals(false, rows.get(0).get("dup_in_file"));
+        assertEquals(35, String.valueOf(rows.get(1).get("mndt_req_id")).length(), "distinct ref mints");
+        assertEquals(false, rows.get(1).get("dup_in_file"));
+        assertTrue(rows.get(2).get("mndt_req_id") == null, "later duplicate carries NULL id");
+        assertEquals(true, rows.get(2).get("dup_in_file"), "later duplicate flagged for MRV");
+
+        List<String> before = dupProjection(arrival);
+        JobExecution replay = jobOperator.start(mrrJob, params(arrival, book, "2"));
+        assertEquals(BatchStatus.COMPLETED, replay.getStatus());
+        assertEquals(before, dupProjection(arrival),
+                "first-wins dedup must be deterministic across byte-verbatim replays");
+    }
+
+    List<String> dupProjection(UUID arrival) {
+        return jdbc.queryForList("""
+                SELECT sequence || '|' || COALESCE(mndt_req_id, '-') || '|' || dup_in_file
+                FROM mandate_request_entry WHERE arrival_id=? ORDER BY sequence""", String.class, arrival);
+    }
+
+    @Test
+    @Order(8)
+    void crossArrivalResubmitCollisionIsBusinessFatalNotTechCrash() throws Exception {
+        // B1(b): a byte-identical book resubmitted under a NEW arrival identity
+        // (same header, same refs -> same deterministic mint) must convert the
+        // mndt_req_id unique violation into a BUSINESS file-fatal (MIR NACK
+        // path), never a raw technical crash loop. AGT R-16 quarantine is the
+        // primary guard upstream; this is the belt.
+        clearOutcomes();
+        UUID first = UUID.randomUUID();
+        Path bookP = MandateBookFixture.book(BOOK_DIR, "FNBCC01_MNDT2026072212000006.txt",
+                MandateBookFixture.header(MandateBookFixture.CLIENT, 1),
+                List.of(MandateBookFixture.detail(1, "CRE", "MREF-COLL-X")));
+        assertEquals(BatchStatus.COMPLETED, jobOperator.start(mrrJob, params(first, bookP, null)).getStatus());
+
+        // Isolate the resubmit's seam from the first arrival's: the fallback name
+        // local-mrr-<executionId> can repeat across runs and StagedWrite is
+        // exists->skip, so the first arrival's ACCEPTED seam would otherwise mask
+        // this run's verdict (same clearOutcomes mitigation the other seam tests use).
+        clearOutcomes();
+        UUID resubmit = UUID.randomUUID();
+        Path bookQ = MandateBookFixture.book(BOOK_DIR, "FNBCC01_MNDT2026072212000007.txt",
+                MandateBookFixture.header(MandateBookFixture.CLIENT, 1),
+                List.of(MandateBookFixture.detail(1, "CRE", "MREF-COLL-X")));
+        JobExecution run = jobOperator.start(mrrJob, params(resubmit, bookQ, null));
+
+        assertEquals(BatchStatus.COMPLETED, run.getStatus(),
+                "cross-arrival collision is a business verdict, not a TECH failure");
+        assertTrue(run.getExecutionContext().getString("fileFatalReason").contains("MndtReqId collision"),
+                "reason must name the collision");
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT count(*) FROM mandate_request_entry WHERE arrival_id=?", Integer.class, resubmit),
+                "colliding arrival persists nothing");
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT count(*) FROM mandate_request_entry WHERE arrival_id=?", Integer.class, first),
+                "original arrival untouched");
+
+        org.junit.jupiter.api.Assumptions.assumeTrue(System.getenv("JOB_NAME") == null,
+                "seam assertion requires JOB_NAME absent from the environment");
+        Path seam = EXCHANGE_ROOT.resolve("outcomes").resolve("local-mrr-" + run.getId());
+        assertTrue(Files.exists(seam), "expected self-describing seam file at " + seam);
+        assertEquals(List.of("BUSINESS_FILE_FATAL"), Files.readAllLines(seam));
+    }
+
+    @Test
     @Order(6)
     void declaredCountMismatchIsWholeFileFatal() throws Exception {
         UUID arrival = UUID.randomUUID();

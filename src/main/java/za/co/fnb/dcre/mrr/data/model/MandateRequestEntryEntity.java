@@ -27,6 +27,7 @@ public class MandateRequestEntryEntity extends BaseEntity {
     private String startDate;
     private String expiryDate;
     private String mndtReqId;
+    private boolean dupInFile;
     private String spineState;
 
     public static MandateRequestEntryEntity of(UUID arrivalId, int sequence, String recordType,
@@ -35,7 +36,7 @@ public class MandateRequestEntryEntity extends BaseEntity {
                                                String debtorBranch, String debtorName, String currency,
                                                String maxCollectionAmountRaw, BigDecimal maxCollectionAmount,
                                                String frequency, String collectionDay, String startDate,
-                                               String expiryDate, String mndtReqId) {
+                                               String expiryDate, String mndtReqId, boolean dupInFile) {
         MandateRequestEntryEntity e = new MandateRequestEntryEntity();
         e.arrivalId = arrivalId;
         e.sequence = sequence;
@@ -55,6 +56,7 @@ public class MandateRequestEntryEntity extends BaseEntity {
         e.startDate = startDate;
         e.expiryDate = expiryDate;
         e.mndtReqId = mndtReqId;
+        e.dupInFile = dupInFile;
         return e;
     }
 
@@ -76,5 +78,6 @@ public class MandateRequestEntryEntity extends BaseEntity {
     public String getStartDate() { return startDate; }
     public String getExpiryDate() { return expiryDate; }
     public String getMndtReqId() { return mndtReqId; }
+    public boolean getDupInFile() { return dupInFile; }
     public String getSpineState() { return spineState; }
 }

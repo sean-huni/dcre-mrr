@@ -15,6 +15,7 @@ import za.co.fnb.dcre.mrr.batch.FixedRecordRangeReader;
 import za.co.fnb.dcre.mrr.batch.LineRangePartitioner;
 import za.co.fnb.dcre.mrr.data.repo.MandateRequestEntryBatchDao;
 import za.co.fnb.dcre.mrr.data.repo.MandateRequestHeaderRepo;
+import za.co.fnb.dcre.mrr.domain.IntraFileDuplicates;
 import za.co.fnb.dcre.mrr.service.BookHeaderTasklet;
 import za.co.fnb.dcre.mrr.service.MandateEntryWriter;
 import za.co.fnb.dcre.platform.batch.CrdbRetryExceptionHandler;
@@ -98,12 +99,20 @@ public class MrrJobConfig {
                 .build();
     }
 
+    /**
+     * The first-wins duplicate set (B1a) is scanned single-threaded at ingest and
+     * ferried here through the job execution context as a CSV (same channel CTV uses
+     * for asOfTimestamp): every partition worker sees the whole-file view, so a later
+     * duplicate lands NULL id + dup_in_file=true regardless of which partition holds it.
+     */
     @Bean
     @StepScope
     public MandateEntryWriter entryWriter(MandateRequestEntryBatchDao dao,
                                           MandateRequestHeaderRepo headerRepo,
                                           @Value("#{jobParameters['arrival.id']}") String arrivalId,
+                                          @Value("#{jobExecutionContext['dupSequences']}") String dupSequences,
                                           @Value("${dcre.amount-scale}") int amountScale) {
-        return new MandateEntryWriter(dao, headerRepo, UUID.fromString(arrivalId), amountScale);
+        return new MandateEntryWriter(dao, headerRepo, UUID.fromString(arrivalId), amountScale,
+                IntraFileDuplicates.parse(dupSequences));
     }
 }

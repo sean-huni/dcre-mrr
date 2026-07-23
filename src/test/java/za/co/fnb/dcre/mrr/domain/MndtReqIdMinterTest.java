@@ -39,6 +39,15 @@ class MndtReqIdMinterTest {
     }
 
     @Test
+    void delimiterAmbiguityDoesNotCollide() {
+        // m6: length-prefixed component encoding, never a raw delimiter join:
+        // ("A", "B|C") and ("A|B", "C") must digest differently.
+        assertNotEquals(MndtReqIdMinter.mint("A", "B|C", ACTION, MSG),
+                MndtReqIdMinter.mint("A|B", "C", ACTION, MSG),
+                "component boundaries must be part of the digest input");
+    }
+
+    @Test
     void blankIdentityComponentFailsClosed() {
         // house idempotency-key rule: no nullable dimensions, no null_null keys
         assertThrows(IllegalArgumentException.class, () -> MndtReqIdMinter.mint(null, REF, ACTION, MSG));
