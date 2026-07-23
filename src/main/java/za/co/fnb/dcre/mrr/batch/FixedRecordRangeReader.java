@@ -6,7 +6,7 @@ import org.springframework.batch.infrastructure.item.ItemStreamException;
 import org.springframework.batch.infrastructure.item.ItemStreamReader;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import za.co.fnb.dcre.mrr.service.FileFatalException;
+import za.co.fnb.dcre.mrr.domain.FileFatalException;
 import za.co.fnb.dcre.mrr.service.MandateEntryWriter;
 
 import java.io.IOException;

@@ -4,7 +4,7 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import za.co.fnb.dcre.mrr.data.model.MandateRequestEntryEntity;
-import za.co.fnb.dcre.mrr.service.FileFatalException;
+import za.co.fnb.dcre.mrr.domain.FileFatalException;
 
 import java.sql.PreparedStatement;
 import java.sql.SQLException;

@@ -292,10 +292,14 @@ class MrrJobTest {
                 List.of(MandateBookFixture.detail(1, "CRE", "MREF-COLL-X")));
         assertEquals(BatchStatus.COMPLETED, jobOperator.start(mrrJob, params(first, bookP, null)).getStatus());
 
-        // Isolate the resubmit's seam from the first arrival's: the fallback name
-        // local-mrr-<executionId> can repeat across runs and StagedWrite is
-        // exists->skip, so the first arrival's ACCEPTED seam would otherwise mask
-        // this run's verdict (same clearOutcomes mitigation the other seam tests use).
+        // Isolate the resubmit's seam from the first arrival's. Verified: this
+        // test's JobRepository is Spring Batch 6's non-persistent
+        // ResourcelessJobRepository (MRR wires no batch datasource), so
+        // JobExecution.getId() is a CONSTANT 1 for every run, not monotonic; the
+        // fallback seam name local-mrr-<id> therefore repeats and StagedWrite is
+        // exists->skip. Without this clear the first arrival's ACCEPTED seam masks
+        // this run's FILE_FATAL verdict, so the clear is REQUIRED, not belt-and-
+        // suspenders (production names the seam by the unique JOB_NAME, so it is moot there).
         clearOutcomes();
         UUID resubmit = UUID.randomUUID();
         Path bookQ = MandateBookFixture.book(BOOK_DIR, "FNBCC01_MNDT2026072212000007.txt",
@@ -311,6 +315,51 @@ class MrrJobTest {
                 "SELECT count(*) FROM mandate_request_entry WHERE arrival_id=?", Integer.class, resubmit),
                 "colliding arrival persists nothing");
         assertEquals(1, jdbc.queryForObject(
+                "SELECT count(*) FROM mandate_request_entry WHERE arrival_id=?", Integer.class, first),
+                "original arrival untouched");
+
+        org.junit.jupiter.api.Assumptions.assumeTrue(System.getenv("JOB_NAME") == null,
+                "seam assertion requires JOB_NAME absent from the environment");
+        Path seam = EXCHANGE_ROOT.resolve("outcomes").resolve("local-mrr-" + run.getId());
+        assertTrue(Files.exists(seam), "expected self-describing seam file at " + seam);
+        assertEquals(List.of("BUSINESS_FILE_FATAL"), Files.readAllLines(seam));
+    }
+
+    @Test
+    @Order(9)
+    void crossArrivalPartialOverlapCollisionIsBusinessFatalNotTechCrash() throws Exception {
+        // B1b partial overlap: a resubmit under a NEW arrival that shares the
+        // msg_id (byte-identical header) but reorders/changes content so only a
+        // LATER row collides with a prior arrival must still be caught at INGEST
+        // as a business FILE_FATAL, never slip the pre-flight and die at the DAO
+        // belt as a TECH crash. Exercises the all-first-occurrence-ids pre-flight.
+        clearOutcomes();
+        UUID first = UUID.randomUUID();
+        Path bookP = MandateBookFixture.book(BOOK_DIR, "FNBCC01_MNDT2026072212000008.txt",
+                MandateBookFixture.header(MandateBookFixture.CLIENT, 2),
+                List.of(MandateBookFixture.detail(1, "CRE", "MREF-OV-P1"),
+                        MandateBookFixture.detail(2, "CRE", "MREF-OV-P2")));
+        assertEquals(BatchStatus.COMPLETED, jobOperator.start(mrrJob, params(first, bookP, null)).getStatus());
+
+        // Same header bytes -> same msg_id; row 1 is a NEW ref (no collision),
+        // only row 2 (MREF-OV-P2) collides with arrival-1's row 2, so a
+        // first-row-only pre-flight would miss it and hit the DAO poison-pill.
+        clearOutcomes();
+        UUID resubmit = UUID.randomUUID();
+        Path bookQ = MandateBookFixture.book(BOOK_DIR, "FNBCC01_MNDT2026072212000009.txt",
+                MandateBookFixture.header(MandateBookFixture.CLIENT, 2),
+                List.of(MandateBookFixture.detail(1, "CRE", "MREF-OV-P3"),
+                        MandateBookFixture.detail(2, "CRE", "MREF-OV-P2")));
+        JobExecution run = jobOperator.start(mrrJob, params(resubmit, bookQ, null));
+
+        assertEquals(BatchStatus.COMPLETED, run.getStatus(),
+                "a later-row cross-arrival collision is a business verdict, not a TECH failure");
+        assertTrue(run.getExecutionContext().getString("fileFatalReason").contains("MndtReqId collision"),
+                "reason must name the collision");
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT count(*) FROM mandate_request_entry WHERE arrival_id=?", Integer.class, resubmit),
+                "colliding arrival persists nothing");
+        assertEquals(2, jdbc.queryForObject(
                 "SELECT count(*) FROM mandate_request_entry WHERE arrival_id=?", Integer.class, first),
                 "original arrival untouched");
 

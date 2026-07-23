@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;
 import za.co.fnb.dcre.mrr.data.model.MandateRequestHeaderEntity;
 import za.co.fnb.dcre.mrr.data.repo.MandateRequestEntryRepo;
 import za.co.fnb.dcre.mrr.data.repo.MandateRequestHeaderRepo;
+import za.co.fnb.dcre.mrr.domain.FileFatalException;
 import za.co.fnb.dcre.mrr.domain.IntraFileDuplicates;
 import za.co.fnb.dcre.mrr.domain.MndtReqIdMinter;
 import za.co.fnb.dcre.platform.files.MandateLayouts;
@@ -83,9 +84,10 @@ public class MandateBookReaderService {
             }
             OpaqueRef msgId = OpaqueRef.ofFixedWidth(header.substring(4, 26));
             List<IntraFileDuplicates.Row> rows = detailRows(lines);
-            crossArrivalCollisionGuard(arrivalId, destination, msgId.canonical(), rows);
+            IntraFileDuplicates duplicates = IntraFileDuplicates.scan(rows);
+            crossArrivalCollisionGuard(arrivalId, destination, msgId.canonical(), rows, duplicates);
             repo(arrivalId, header, msgId, declared, destination, tokens, version);
-            return IngestOutcome.accepted(IntraFileDuplicates.scan(rows).toCsv());
+            return IngestOutcome.accepted(duplicates.toCsv());
         } catch (FileFatalException e) {
             return IngestOutcome.fatal(e.getMessage());
         }
@@ -114,22 +116,26 @@ public class MandateBookReaderService {
     }
 
     /**
-     * B1b: the deterministic mint of the first (always non-duplicate) row is checked
-     * against other arrivals. A same-msg_id resubmit under a NEW arrival re-mints the
-     * identical id, so a match is a whole-file business FILE_FATAL at ingest (NACK via
-     * MIR, zero rows persisted) rather than a mid-chunk UNIQUE poison-pill; the DAO
-     * belt covers the residual write-race. Replays are unaffected (same arrival excluded).
+     * B1b: EVERY first-occurrence (first-wins winner) id of the book is minted and
+     * checked against other arrivals in one IN-list scan. A same-msg_id resubmit
+     * under a NEW arrival re-mints identical ids even when only a LATER/reordered row
+     * overlaps a prior arrival, so checking just the first row would let that slip the
+     * pre-flight and poison-pill the DAO mid-chunk (a TECH crash). Any match is a
+     * whole-file business FILE_FATAL at ingest (NACK via MIR, zero rows persisted);
+     * the DAO belt covers only the residual write-race. Replays are unaffected (same
+     * arrival excluded). Duplicate later occurrences are NULL-minted, so excluded.
      */
     private void crossArrivalCollisionGuard(UUID arrivalId, String client, String msgId,
-                                            List<IntraFileDuplicates.Row> rows) {
-        if (rows.isEmpty()) {
-            return;
+                                            List<IntraFileDuplicates.Row> rows, IntraFileDuplicates duplicates) {
+        List<String> mintedIds = new ArrayList<>(rows.size());
+        for (IntraFileDuplicates.Row row : rows) {
+            if (!duplicates.isDuplicate(row.sequence())) {
+                mintedIds.add(MndtReqIdMinter.mint(client, row.mandateRef(), row.actionCode(), msgId));
+            }
         }
-        IntraFileDuplicates.Row first = rows.get(0);
-        String mintedId = MndtReqIdMinter.mint(client, first.mandateRef(), first.actionCode(), msgId);
-        if (entryRepo.countByMndtReqIdUnderOtherArrival(mintedId, arrivalId) > 0) {
-            throw new FileFatalException("MndtReqId collision: " + mintedId
-                    + " already minted under another arrival (cross-arrival same-msg_id resubmit past AGT R-16)");
+        if (!mintedIds.isEmpty() && entryRepo.countByMndtReqIdInUnderOtherArrival(mintedIds, arrivalId) > 0) {
+            throw new FileFatalException("MndtReqId collision: a minted MndtReqId in this book already "
+                    + "exists under another arrival (cross-arrival same-msg_id resubmit past AGT R-16)");
         }
     }
 

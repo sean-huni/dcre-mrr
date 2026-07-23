@@ -1,11 +1,12 @@
-package za.co.fnb.dcre.mrr.service;
+package za.co.fnb.dcre.mrr.domain;
 
 /**
- * A whole-book fatal condition. The TIER decides whether it is a business verdict
- * or a technical death (m1, stated honestly):
+ * A whole-book fatal condition (domain: a business rule, thrown across the batch,
+ * service and data tiers, so it lives below all of them). The TIER decides whether
+ * it is a business verdict or a technical death (m1, stated honestly):
  * <ul>
  *   <li>Thrown from the INGEST tier (header structural checks + the cross-arrival
- *       MndtReqId collision pre-flight in {@link MandateBookReaderService}): caught
+ *       MndtReqId collision pre-flight in {@code MandateBookReaderService}): caught
  *       there and routed to the FILE_FATAL exit, so the job COMPLETES with a BUSINESS
  *       verdict (NACK via MIR later), zero rows persisted.</li>
  *   <li>Thrown from the partitioned detail step (the range reader's LRECL/overrun

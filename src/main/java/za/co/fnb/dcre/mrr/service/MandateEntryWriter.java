@@ -4,6 +4,7 @@ import za.co.fnb.dcre.mrr.data.model.MandateRequestEntryEntity;
 import za.co.fnb.dcre.mrr.data.model.MandateRequestHeaderEntity;
 import za.co.fnb.dcre.mrr.data.repo.MandateRequestEntryBatchDao;
 import za.co.fnb.dcre.mrr.data.repo.MandateRequestHeaderRepo;
+import za.co.fnb.dcre.mrr.domain.FileFatalException;
 import za.co.fnb.dcre.mrr.domain.IntraFileDuplicates;
 import za.co.fnb.dcre.mrr.domain.MndtReqIdMinter;
 import za.co.fnb.dcre.platform.files.FixedWidthLayout;

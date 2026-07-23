@@ -3,7 +3,7 @@ package za.co.fnb.dcre.mrr.batch;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.batch.infrastructure.item.ExecutionContext;
-import za.co.fnb.dcre.mrr.service.FileFatalException;
+import za.co.fnb.dcre.mrr.domain.FileFatalException;
 import za.co.fnb.dcre.mrr.service.MandateEntryWriter;
 
 import java.io.IOException;
