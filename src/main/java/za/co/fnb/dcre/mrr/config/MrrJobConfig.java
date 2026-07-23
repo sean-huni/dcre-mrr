@@ -19,6 +19,7 @@ import za.co.fnb.dcre.mrr.domain.IntraFileDuplicates;
 import za.co.fnb.dcre.mrr.service.BookHeaderTasklet;
 import za.co.fnb.dcre.mrr.service.MandateEntryWriter;
 import za.co.fnb.dcre.platform.batch.CrdbRetryExceptionHandler;
+import za.co.fnb.dcre.platform.batch.HeartbeatWriter;
 import za.co.fnb.dcre.platform.batch.OutcomeSeamListener;
 import za.co.fnb.dcre.platform.batch.PartitionSizer;
 
@@ -67,9 +68,11 @@ public class MrrJobConfig {
     }
 
     @Bean
-    public Job mrrJob(JobRepository repo, Step headerStep, Step detailStep, OutcomeSeamListener listener) {
+    public Job mrrJob(JobRepository repo, Step headerStep, Step detailStep, OutcomeSeamListener listener,
+                      HeartbeatWriter heartbeatWriter) {
         return new JobBuilder("mrrJob", repo)
                 .listener(listener)
+                .listener(heartbeatWriter)
                 .start(headerStep)
                     .on(BookHeaderTasklet.EXIT_FILE_FATAL).end() // business verdict, job COMPLETED
                 .from(headerStep).on("*").to(detailStep)
