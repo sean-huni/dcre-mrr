@@ -15,7 +15,7 @@ import java.util.List;
  * Sole owner of the mandate_request_entry write SQL: the guarded UPSERT keyed
  * (arrival_id, sequence) (R-05), driven through JdbcTemplate.batchUpdate in
  * 500-row batches. spine_state is deliberately ABSENT from both the insert
- * column list (DB default RECEIVED) and the DO UPDATE set: MRV/MAF/MIT own
+ * column list (DB default RECEIVED) and the DO UPDATE set: MRV/MAS/MIT own
  * that column family (ruling note 2), so a replayed ingest never clobbers a
  * downstream stage's advancement. dup_in_file/mndt_req_id are set per row: a
  * first-wins intra-file duplicate lands NULL id + dup_in_file=true (B1a).
