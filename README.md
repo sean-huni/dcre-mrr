@@ -4,7 +4,7 @@ Mandates Request Reader: boundary stage of the M10 mandates flow (SCRUM-74) that
 
 ## What it does
 
-MRR is the first stage of the mandates request DAG. OnHost drops a fixed-width instruction book into the per-client exchange (`onhost-req-man/in`), AGT registers the arrival and launches MRR as a short-lived Kubernetes Job with `arrival.id` as the identifying JobParameter (R-16). MRR parses the header, runs the whole-file structural tier, then ingests every instruction record (action codes CRE|AMD|CAN canonicalized to CREATE|AMEND|CANCEL); it is the single writer of the spine ROWS (R-04), while MRV/MAF/MIT advance the `spine_state` column they own per stage. Route: `MRR -> MRV -> MAF -> MIT -> { MIR || MRW }`.
+MRR is the first stage of the mandates request DAG. OnHost drops a fixed-width instruction book into the per-client exchange (`onhost-req-man/in`), AGT registers the arrival and launches MRR as a short-lived Kubernetes Job with `arrival.id` as the identifying JobParameter (R-16). MRR parses the header, runs the whole-file structural tier, then ingests every instruction record (action codes CRE|AMD|CAN canonicalized to CREATE|AMEND|CANCEL); it is the single writer of the spine ROWS (R-04), while MRV/MAS/MIT advance the `spine_state` column they own per stage. Route: `MRR -> MRV -> MAS -> MIT -> { MIR || MRW }`.
 
 Each entry's `MndtReqId` is minted DETERMINISTICALLY as a SHA-256 digest over the full identity tuple (client, mandate_ref, action_code, msg_id), with each component length-prefixed before hashing so component boundaries are part of the digest (no delimiter ambiguity), shape `MRQ` + 32 hex chars (35 = ISO 20022 max), and persisted at ingest, write-ahead of every downstream side effect (R-07): a byte-verbatim replay re-mints the identical id, so the UNIQUE constraint arbitrates duplicate submissions instead of minting drift.
 
@@ -84,4 +84,4 @@ Image base: `eclipse-temurin:25-jre-alpine`. AGT launches MRR per registered `on
 
 ## Related repositories
 
-Mandates DAG: dcre-mrr (this repo) with mrv/maf/mit/mir/mrw/mar/msr/mrg arriving through the M10 plan; skeleton source: [dcre-crr](https://github.com/sean-huni/dcre-crr); orchestrator: [dcre-agt](https://github.com/sean-huni/dcre-agt); platform libs: dcre-platform-model/files/batch/persistence; support: dcre-infra, dcre-design-register.
+Mandates DAG: dcre-mrr (this repo) with mrv/mas/mit/mir/mrw/mar/msr/mrg arriving through the M10 plan; skeleton source: [dcre-crr](https://github.com/sean-huni/dcre-crr); orchestrator: [dcre-agt](https://github.com/sean-huni/dcre-agt); platform libs: dcre-platform-model/files/batch/persistence; support: dcre-infra, dcre-design-register.

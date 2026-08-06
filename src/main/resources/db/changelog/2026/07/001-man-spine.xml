@@ -5,7 +5,7 @@
         xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
         http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
 
-    <!-- Mandate request spine (MRR single writer of ROWS, R-04; MRV/MAF/MIT
+    <!-- Mandate request spine (MRR single writer of ROWS, R-04; MRV/MAS/MIT
          advance the spine_state column they own per stage, ruling note 2).
          Raw + canonical msg identity per R-15; flow-agnostic: no flow column,
          the man route family is single-flow by construction. -->
