@@ -1,6 +1,6 @@
 package za.co.fnb.dcre.mrr;
 
-import za.co.fnb.dcre.platform.files.MandateLayouts;
+import za.co.fnb.dcre.platform.copybook.MandateLayouts;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
