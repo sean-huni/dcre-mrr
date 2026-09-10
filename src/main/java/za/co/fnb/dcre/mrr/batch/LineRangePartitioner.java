@@ -6,7 +6,7 @@ import org.springframework.batch.infrastructure.item.ExecutionContext;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import za.co.fnb.dcre.mrr.domain.FileFatalException;
-import za.co.fnb.dcre.platform.files.MandateLayouts;
+import za.co.fnb.dcre.platform.copybook.MandateLayouts;
 
 import java.io.BufferedInputStream;
 import java.io.IOException;

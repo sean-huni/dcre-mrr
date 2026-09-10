@@ -7,7 +7,7 @@ import za.co.fnb.dcre.mrr.data.repo.MandateRequestHeaderRepo;
 import za.co.fnb.dcre.mrr.domain.FileFatalException;
 import za.co.fnb.dcre.mrr.domain.IntraFileDuplicates;
 import za.co.fnb.dcre.mrr.domain.MndtReqIdMinter;
-import za.co.fnb.dcre.platform.files.MandateLayouts;
+import za.co.fnb.dcre.platform.copybook.MandateLayouts;
 import za.co.fnb.dcre.platform.files.R31Filename;
 import za.co.fnb.dcre.platform.model.OpaqueRef;
 
